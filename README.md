@@ -21,17 +21,13 @@ plantillas/        → templates for new entries
 
 ## Published articles
 
-Articles published on [wiracocha.substack.com](https://wiracocha.substack.com)
-are written and maintained in a separate workspace, then published. This
-section links to them once live.
+Technical findings from this repo are adapted and published on
+[wiracochalabs.substack.com](https://wiracochalabs.substack.com).
 
-### How we build economic systems
-
-19-part series on economic systems, institutions, and governance design.
-Connects historical analysis with technical research on DAOs and
-decentralized infrastructure.
-
-_(links will be added as articles are published)_
+This repo only documents what we discover technically (whitepapers,
+experiments, results). Editorial and management writing — essays,
+governance, economics — lives outside this repo and is published only as
+articles. Links will be listed here once live.
 
 ## License — CC-BY-SA 4.0
 
@@ -50,5 +46,5 @@ share under the same license.
 ## Publishing workflow
 
 This repo is the versioned source of truth. Whitepapers and experiment logs
-are adapted and published on [wiracocha.substack.com](https://wiracocha.substack.com)
+are adapted and published on [wiracochalabs.substack.com](https://wiracochalabs.substack.com)
 as a distribution layer. The repo always comes first; Substack is a derivative.
