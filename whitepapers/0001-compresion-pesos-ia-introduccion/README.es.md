@@ -1,6 +1,6 @@
 # Compresión de pesos de modelos de IA para redes descentralizadas: motivación y mapa de investigación
 
-**Whitepaper 0001 · v1.0** · noviembre 2026 · Renzo Tincopa — Wiracocha Labs
+**Whitepaper 0001 · v1.1** · noviembre 2026 · Renzo Tincopa — Wiracocha Labs
 
 ---
 
@@ -147,17 +147,24 @@ et al., 2022].
 
 ### Nivel 2 — Compresión lossless post-cuantización
 
-Medido sobre un artefacto real. Qwen2.5-Coder-7B-Instruct en GGUF
-Q4_K_M ocupa 4.683.073.536 bytes (4,36 GiB). Comprimido con zstd 1.5.7
-en nivel 19 queda en 4.572.033.589 bytes: **ratio 1,024x, una reducción
-del 2,4%**. El ahorro es 111 MB.
+Medido sobre dos artefactos del mismo modelo, ambos en GGUF y comprimidos
+con zstd 1.5.7 en nivel 19:
+
+| Modelo | Quant | Tamaño GGUF | zstd -19 | Ratio | Ahorro |
+|---|---|---|---|---|---|
+| Qwen2.5-Coder-7B-Instruct | Q4_K_M | 4.683.073.536 (4,36 GiB) | 4.572.033.589 | **1,024x** | 2,4% |
+| Qwen2.5-Coder-7B-Instruct | Q2_K | 3.015.940.032 (2,81 GiB) | 2.937.087.848 | **1,027x** | 2,6% |
+
+Los dos quedan alrededor del 2,5%. Pasar de 4 bits a 2 bits no cambia el
+panorama: el ratio se mueve dos décimas de punto.
 
 Es mucho menos de lo que estimábamos antes de medir (1,1x–1,5x). La
 razón es que la cuantización introduce ruido que sube la entropía del
 dato: un peso a 4 bits tiene 16 valores posibles y la redundancia
 estructural que explotan los compresores lossless casi desaparece. La
 medición respalda la hipótesis de que el techo está pegado al límite
-informacional.
+informacional, y la similitud entre los dos niveles sugiere que ese
+límite se alcanza bastante antes de los 4 bits.
 
 El resultado es consistente con la nota de ZipNN en §7: su ganancia de
 ~33% aplica sobre pesos en BF16/FP32, donde la estructura del exponente
@@ -166,14 +173,15 @@ todavía existe. Después de cuantizar, ese margen ya no está.
 Reproducible con:
 
 ```bash
-# Modelo: Qwen/Qwen2.5-Coder-7B-Instruct-GGUF (q4_k_m)
-ls -l qwen2.5-coder-7b-instruct-q4_k_m.gguf      # 4683073536
-zstd -19 -T0 qwen2.5-coder-7b-instruct-q4_k_m.gguf -o modelo.zst
-ls -l modelo.zst                                 # 4572033589
+# Modelos: Qwen/Qwen2.5-Coder-7B-Instruct-GGUF (q4_k_m, q2_k)
+ls -l qwen2.5-coder-7b-instruct-q4_k_m.gguf   # 4683073536
+ls -l qwen2.5-coder-7b-instruct-q2_k.gguf     # 3015940032
+zstd -19 -T0 qwen2.5-coder-7b-instruct-q4_k_m.gguf -o q4.zst   # 4572033589
+zstd -19 -T0 qwen2.5-coder-7b-instruct-q2_k.gguf   -o q2.zst   # 2937087848
 ```
 
 Hardware: MacBook M1 Pro, 8 núcleos, 16 GB RAM. Tiempo de compresión:
-3m43s.
+3m43s (Q4_K_M) y 2m04s (Q2_K).
 
 
 ### Nivel 3 — Compresión de deltas

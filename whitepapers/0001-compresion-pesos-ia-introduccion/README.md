@@ -1,6 +1,6 @@
 # Compressing AI model weights for decentralized networks: motivation and a research map
 
-**Whitepaper 0001 · v1.0** · November 2026 · Renzo Tincopa — Wiracocha Labs
+**Whitepaper 0001 · v1.1** · November 2026 · Renzo Tincopa — Wiracocha Labs
 License: CC-BY-SA 4.0
 
 ---
@@ -20,9 +20,9 @@ case, and on a cross-cutting constraint identified during design: the format
 must support random-access execution (mmap/streaming), not only compression for
 storage.
 
-Version 1.0 contains one original measurement, for level 2, and it corrects our
-own prior estimate: lossless compression of an already quantized model yields
-**1.024x**, not the 1.1x–1.5x we assumed before measuring (§4, Level 2).
+Version 1.1 contains two original measurements, for level 2, and they correct
+our own prior estimate: lossless compression of an already quantized model
+yields **~2.5%**, not the 1.1x–1.5x we assumed before measuring (§4, Level 2).
 
 ## 2. Motivation
 
@@ -141,16 +141,24 @@ al., 2023] and LLM.int8() (8 bits) [Dettmers et al., 2022].
 
 ### Level 2 — Lossless compression after quantization
 
-Measured on a real artifact. Qwen2.5-Coder-7B-Instruct in GGUF Q4_K_M occupies
-4,683,073,536 bytes (4.36 GiB). Compressed with zstd 1.5.7 at level 19 it
-becomes 4,572,033,589 bytes: a **ratio of 1.024x, a 2.4% reduction**. The saving
-is 111 MB.
+Measured on two artifacts from the same model, both in GGUF and both compressed
+with zstd 1.5.7 at level 19:
+
+| Model | Quant | GGUF size | zstd -19 | Ratio | Saved |
+|---|---|---|---|---|---|
+| Qwen2.5-Coder-7B-Instruct | Q4_K_M | 4,683,073,536 (4.36 GiB) | 4,572,033,589 | **1.024x** | 2.4% |
+| Qwen2.5-Coder-7B-Instruct | Q2_K | 3,015,940,032 (2.81 GiB) | 2,937,087,848 | **1.027x** | 2.6% |
+
+Both land around 2.5%. Going from 4-bit to 2-bit weights does not change the
+picture: the ratio moves by two tenths of a percent.
 
 That is far below the 1.1x–1.5x we estimated before measuring. The reason is
 that quantization introduces noise, which raises the entropy of the data: a
 4-bit weight has only 16 possible values, and the structural redundancy that
 lossless compressors exploit almost disappears. The measurement supports the
-hypothesis that the ceiling sits against the informational limit.
+hypothesis that the ceiling sits against the informational limit, and the
+similarity between the two levels suggests that limit is reached well before
+4 bits.
 
 The result is consistent with the ZipNN note in §7: its ~33% gain applies to
 BF16/FP32 weights, where the exponent structure still exists. After
@@ -159,13 +167,15 @@ quantization, that margin is gone.
 Reproducible with:
 
 ```bash
-# Model: Qwen/Qwen2.5-Coder-7B-Instruct-GGUF (q4_k_m)
-ls -l qwen2.5-coder-7b-instruct-q4_k_m.gguf      # 4683073536
-zstd -19 -T0 qwen2.5-coder-7b-instruct-q4_k_m.gguf -o model.zst
-ls -l model.zst                                  # 4572033589
+# Models: Qwen/Qwen2.5-Coder-7B-Instruct-GGUF (q4_k_m, q2_k)
+ls -l qwen2.5-coder-7b-instruct-q4_k_m.gguf   # 4683073536
+ls -l qwen2.5-coder-7b-instruct-q2_k.gguf     # 3015940032
+zstd -19 -T0 qwen2.5-coder-7b-instruct-q4_k_m.gguf -o q4.zst   # 4572033589
+zstd -19 -T0 qwen2.5-coder-7b-instruct-q2_k.gguf   -o q2.zst   # 2937087848
 ```
 
-Hardware: MacBook M1 Pro, 8 cores, 16 GB RAM. Compression time: 3m43s.
+Hardware: MacBook M1 Pro, 8 cores, 16 GB RAM. Compression time: 3m43s (Q4_K_M)
+and 2m04s (Q2_K).
 
 ### Level 3 — Delta compression
 
