@@ -19,15 +19,26 @@ bitacora/          → experiment logs (dated entries)
 plantillas/        → templates for new entries
 ```
 
+## Whitepapers
+
+- **[0001 — Compressing AI model weights for decentralized networks](whitepapers/0001-compresion-pesos-ia-introduccion/)**
+  · v1.0 · November 2026 · [English](whitepapers/0001-compresion-pesos-ia-introduccion/README.md)
+  · [Español](whitepapers/0001-compresion-pesos-ia-introduccion/README.es.md)
+
 ## Published articles
 
 Technical findings from this repo are adapted and published on
 [wiracochalabs.substack.com](https://wiracochalabs.substack.com).
 
+- [Bienvenidos a Wiracocha Labs](https://wiracochalabs.substack.com/p/bienvenidos-a-wiracocha-labs)
+- [¿Qué hace pesado a un modelo de IA?](https://wiracochalabs.substack.com/p/que-hace-pesado-a-un-modelo-de-ia)
+- [DeepSeek no es "más chico" que Opus](https://wiracochalabs.substack.com/p/deepseek-no-es-mas-chico-que-opus)
+- [Los tres niveles de hacer un modelo más pequeño](https://wiracochalabs.substack.com/p/los-tres-niveles-de-hacer-un-modelo)
+
 This repo only documents what we discover technically (whitepapers,
 experiments, results). Editorial and management writing — essays,
 governance, economics — lives outside this repo and is published only as
-articles. Links will be listed here once live.
+articles.
 
 ## License — CC-BY-SA 4.0
 

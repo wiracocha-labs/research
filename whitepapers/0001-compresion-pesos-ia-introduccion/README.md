@@ -1,234 +1,247 @@
-# Compresión de pesos de modelos de IA para redes descentralizadas: motivación y mapa de investigación
+# Compressing AI model weights for decentralized networks: motivation and a research map
 
-**Whitepaper 0001** · Junio 2026 — actualizado septiembre 2026 · Wiracocha Labs
+**Whitepaper 0001 · v1.0** · November 2026 · Renzo Tincopa — Wiracocha Labs
+License: CC-BY-SA 4.0
 
 ---
 
-## 1. Resumen
+## 1. Summary
 
-El avance de modelos de lenguaje grandes (LLMs) y modelos fundacionales está
-concentrado en organizaciones con acceso a clusters masivos de GPUs. Esta
-centralización no es solo económica sino técnica: los modelos requieren
-decenas de GB de memoria y ancho de banda que hardware de consumo no puede
-sostener. Este whitepaper descompone el problema de compresión de pesos en
-tres niveles —cuantización, compresión lossless post-cuantización y compresión
-de deltas entre versiones—, revisa el estado del arte en cada nivel, e
-identifica las brechas donde hay espacio de investigación original. El
-proyecto `chaka` de Wiracocha Labs se enfoca en los niveles 1 y 3, donde
-las soluciones existentes no cubren el caso de uso de redes descentralizadas,
-y en una restricción transversal identificada durante el diseño: el formato
-debe soportar ejecución por acceso aleatorio (mmap/streaming), no solo
-compresión para almacenamiento.
+Progress in large language models and foundation models is concentrated in
+organizations with access to massive GPU clusters. This centralization is not
+only economic but technical: these models require tens of gigabytes of memory
+and bandwidth that consumer hardware cannot sustain. This whitepaper breaks the
+weight compression problem into three levels — quantization, lossless
+compression after quantization, and delta compression between versions —
+reviews the state of the art at each level, and identifies the gaps where
+original research is possible. Wiracocha Labs' `chaka` project focuses on levels
+1 and 3, where existing solutions do not cover the decentralized network use
+case, and on a cross-cutting constraint identified during design: the format
+must support random-access execution (mmap/streaming), not only compression for
+storage.
 
-## 2. Motivación
+Version 1.0 contains one original measurement, for level 2, and it corrects our
+own prior estimate: lossless compression of an already quantized model yields
+**1.024x**, not the 1.1x–1.5x we assumed before measuring (§4, Level 2).
 
-La inferencia y el entrenamiento de modelos grandes requieren, hoy,
-hardware especializado. Una GPU de 80 GB (A100 u H100) cuesta del orden de
-USD 15,000–40,000+ según modelo y mercado. Esto significa que:
+## 2. Motivation
 
-- Solo grandes empresas y laboratorios pueden entrenar *y* servir modelos
-  de última generación.
-- El control del modelo (pesos, arquitectura, datos de entrenamiento) queda
-  en manos de pocos actores.
-- La diversidad de modelos, fine-tunings comunitarios y variantes locales
-  se reduce porque el ecosistema asume hardware de datacenter.
+Inference and training of large models require, today, specialized hardware. An
+80 GB GPU (A100 or H100) costs on the order of USD 15,000–40,000+ depending on
+model and market. This means:
 
-La alternativa es una red descentralizada donde nodos con hardware modesto
-(una laptop con GPU de 8-16 GB, o incluso CPU) puedan servir, compartir y
-actualizar fragmentos de modelos. Esto requiere compresión agresiva que
-lleve los pesos a un tamaño factible para transmisión P2P e inferencia en
-el borde.
+- Only large companies and laboratories can train *and* serve
+  state-of-the-art models.
+- Control over the model (weights, architecture, training data) stays in few
+  hands.
+- Model diversity, community fine-tunings and local variants shrink, because
+  the ecosystem assumes datacenter hardware.
 
-No aspiramos a reemplazar los datacenters. La tesis es que debe existir un
-espectro: desde hardware especializado hasta hardware de consumo, pasando
-por redes de nodos que colaboran. La compresión es la llave técnica para
-que ese espectro exista.
+The alternative is a decentralized network where nodes with modest hardware (a
+laptop with an 8–16 GB GPU, or even a CPU) can serve, share and update
+fragments of models. That requires aggressive compression to bring weights to a
+size that is feasible for P2P transmission and for inference at the edge.
 
-## 3. El problema técnico en tres niveles
+We do not aim to replace datacenters. The thesis is that a spectrum must exist:
+from specialized hardware to consumer hardware, through networks of
+collaborating nodes. Compression is the technical key for that spectrum to
+exist.
 
-Es común hablar de "compresión de modelos" como si fuera un solo problema.
-En realidad son tres problemas distintos, con métricas y restricciones
-diferentes:
+## 3. The technical problem in three levels
 
-### Nivel 1: Cuantización (quantization)
+"Model compression" is commonly discussed as if it were a single problem. It is
+three distinct problems, with different metrics and different constraints.
 
-Reduce la precisión numérica de los pesos: de FP32 (32 bits por peso) a
-FP16, INT8, INT4 o incluso binario. El resultado directo es que el modelo
-ocupa menos memoria y, crucialmente, **requiere menos hardware para
-inferencia**: un modelo cuantizado a INT4 ocupa ~¼ de la VRAM que su
-versión FP16 (y ~⅛ que FP32), o incluso puede correr en CPU con
-instrucciones SIMD.
+### Level 1: Quantization
 
-Métrica principal: *perplejidad o pérdida en task específicas vs. tamaño
-en bits por peso*.
+It reduces the numerical precision of the weights: from FP32 (32 bits per
+weight) to FP16, INT8, INT4 or even binary. The direct result is that the model
+takes less memory and, crucially, **requires less hardware for inference**: a
+model quantized to INT4 takes ~¼ of the VRAM of its FP16 version (~⅛ of FP32),
+and may even run on CPU with SIMD instructions.
 
-Trade-off: precisión vs. tamaño (y por tanto, vs. hardware mínimo
-requerido).
+Main metric: *perplexity or loss on specific tasks versus size in bits per
+weight*.
 
-### Nivel 2: Compresión lossless post-cuantización
+Trade-off: precision versus size (and therefore versus the minimum hardware
+required).
 
-Una vez que los pesos están en INT4 (por decir un formato), se pueden
-comprimir con algoritmos de propósito general (zstd, gzip, brotli) para
-reducir el tamaño en disco o en tránsito. Esto **no reduce los requisitos
-de hardware de inferencia**: al cargar el modelo hay que descomprimir
-todo a su representación cuantizada.
+### Level 2: Lossless compression after quantization
 
-Métrica principal: *ratio de compresión sobre el binario cuantizado*.
+Once weights are in INT4 (say), they can be compressed with general-purpose
+algorithms (zstd, gzip, brotli) to reduce the size on disk or in transit. This
+**does not reduce the hardware required for inference**: when loading the model,
+everything must be decompressed back to its quantized representation.
 
-Trade-off: velocidad de descompresión vs. ratio. Para uso en disco da
-igual; para transmisión en red puede importar.
+Main metric: *compression ratio over the quantized binary*.
 
-### Nivel 3: Compresión de deltas entre versiones
+Trade-off: decompression speed versus ratio. For disk use it does not matter;
+for network transmission it may.
 
-Cuando un modelo se actualiza (fine-tuning, entrenamiento distribuido,
-corrección de pesos), los cambios suelen ser pequeños respecto al total.
-En lugar de transmitir el modelo completo cada vez, se puede transmitir
-solo la diferencia (delta) entre la versión anterior y la nueva.
+### Level 3: Delta compression between versions
 
-Esto es irrelevante en el caso tradicional (descargas monolíticas de
-Hugging Face) pero **crítico en redes P2P** donde los nodos tienen
-ancho de banda limitado y actualizaciones frecuentes.
+When a model is updated (fine-tuning, distributed training, weight correction),
+the changes are usually small relative to the whole. Instead of transmitting
+the full model every time, only the difference (delta) between the previous and
+the new version can be transmitted.
 
-Métrica principal: *tamaño del delta vs. tamaño del modelo completo*.
+This is irrelevant in the traditional case (monolithic downloads from Hugging
+Face) but **critical in P2P networks**, where nodes have limited bandwidth and
+frequent updates.
 
-Trade-off: eficiencia del delta vs. costo computacional de generarlo y
-aplicarlo.
+Main metric: *delta size versus full model size*.
 
-### Una restricción transversal: acceso aleatorio para ejecución
+Trade-off: delta efficiency versus the computational cost of producing and
+applying it.
 
-Los tres niveles anteriores describen compresión para *almacenamiento y
-transmisión*. Hay una consideración adicional que no es un nivel sino una
-restricción que los atraviesa: **si el objetivo es ejecutar el modelo
-directamente desde el formato comprimido** —pesos residentes en SSD que
-se cargan bajo demanda vía `mmap` o streaming—, el formato debe permitir
-**acceso aleatorio a nivel de bloque**. Si un tensor se comprime como un
-flujo continuo con un codec entrópico (zstd, LZ77+Huffman), se destruye
-esa propiedad: no se puede leer "el bloque 47 de la capa 23" sin
-descomprimir el flujo desde el inicio. (zstd sí admite bloques
-independientes y un modo seekable, pero eso no equivale a un layout
-direccionable por página compatible con `mmap`.)
+### A cross-cutting constraint: random access for execution
 
-Esto explica una decisión de diseño de GGUF que no es evidente a primera
-vista: el formato de ejecución más usado del ecosistema **no aplica
-compresión entrópica en absoluto** — solo cuantización con bloques
-direccionables. Sacrifica ratio de compresión a cambio de que el motor
-pueda mapear el archivo en memoria y leer solo las páginas que necesita.
+The three levels above describe compression for *storage and transmission*.
+There is an additional consideration that is not a level but a constraint that
+cuts across all of them: **if the goal is to execute the model directly from the
+compressed format** — weights resident on SSD, loaded on demand through `mmap`
+or streaming — the format must allow **block-level random access**. If a tensor
+is compressed as a continuous stream with an entropy codec (zstd,
+LZ77+Huffman), that property is destroyed: one cannot read "block 47 of layer
+23" without decompressing the stream from the start. (zstd does support
+independent blocks and a seekable mode, but that is not the same as a
+page-addressable layout compatible with `mmap`.)
 
-Implicación para `chaka`: un único formato optimizado para ratio
-máximo no puede servir a la vez para ejecución en streaming. La dirección
-correcta es un formato con dos perfiles sobre la misma representación
-cuantizada:
+This explains a GGUF design decision that is not obvious at first sight: the
+most widely used execution format in the ecosystem **applies no entropy
+compression at all** — only quantization with addressable blocks. It sacrifices
+compression ratio in exchange for letting the engine map the file into memory
+and read only the pages it needs.
 
-- **Perfil de ejecución** (`.wcx-exec`): cuantización + bloques
-  direccionables + layout compatible con mmap. Comparable en espíritu
-  a GGUF.
-- **Perfil de transferencia** (`.wcx-ship`): el mismo contenido con codec
-  entrópico por bloque + deltas entre versiones. Optimizado para
-  transmisión P2P; se desenvuelve al perfil de ejecución al llegar al
-  nodo destino.
+Implication for `chaka`: a single format optimized for maximum ratio cannot
+also serve streaming execution. The correct direction is a format with two
+profiles over the same quantized representation:
 
-## 4. Estado del arte
+- **Execution profile** (`.wcx-exec`): quantization + addressable blocks +
+  mmap-compatible layout. Comparable in spirit to GGUF.
+- **Transfer profile** (`.wcx-ship`): the same content with a per-block entropy
+  codec + deltas between versions. Optimized for P2P transmission; it unwraps
+  into the execution profile when it reaches the destination node.
 
-### Nivel 1 — Cuantización
+## 4. State of the art
 
-El estándar de facto es GGUF (llama.cpp) con sus K-quants. GGUF soporta
-múltiples niveles de cuantización (Q2_K a Q8_0) y es el formato que
-permite correr LLMs en hardware de consumo hoy. Las técnicas subyacentes
-incluyen GPTQ (cuantización post-entrenamiento con compensación de error),
-LLM.int8() (de Tim Dettmers, que separa features outliers), y más
-recientemente métodos como QuIP y AQLM que mejoran la calidad a bajos
-bits.
+### Level 1 — Quantization
 
-El estado del arte académico en compresión extrema está en ~2 bits por
-peso con pérdida aceptable en tareas estándar [Tseng et al., 2024 —
-QuIP#; también AQLM]. Las técnicas de referencia a mayor precisión son
-GPTQ (~4 bits) [Frantar et al., 2023] y LLM.int8() (8 bits) [Dettmers
-et al., 2022].
+The de facto standard is GGUF (llama.cpp) with its K-quants. GGUF supports
+multiple quantization levels (Q2_K to Q8_0) and is the format that makes LLMs
+runnable on consumer hardware today. The underlying techniques include GPTQ
+(post-training quantization with error compensation), LLM.int8() (by Tim
+Dettmers, which separates outlier features), and more recently methods such as
+QuIP and AQLM that improve quality at low bit widths.
 
-### Nivel 2 — Compresión lossless post-cuantización
+The academic state of the art in extreme compression sits at ~2 bits per weight
+with acceptable loss on standard tasks [Tseng et al., 2024 — QuIP#; also AQLM].
+The reference techniques at higher precision are GPTQ (~4 bits) [Frantar et
+al., 2023] and LLM.int8() (8 bits) [Dettmers et al., 2022].
 
-Sobre pesos ya cuantizados, la ganancia de compresión lossless se estima
-limitada (~1.1x–1.5x con zstd -19; cifra a verificar con los benchmarks
-comparativos pendientes del proyecto). La razón es que la cuantización
-introduce ruido que aumenta la entropía del dato: un peso cuantizado a
-INT4 tiene solo 16 valores posibles y la redundancia estructural que
-explotan los compresores lossless es baja. La hipótesis de trabajo es que
-el techo está cerca del límite informacional — confirmarlo con
-mediciones es parte de los próximos pasos (§6).
+### Level 2 — Lossless compression after quantization
 
-### Nivel 3 — Compresión de deltas
+Measured on a real artifact. Qwen2.5-Coder-7B-Instruct in GGUF Q4_K_M occupies
+4,683,073,536 bytes (4.36 GiB). Compressed with zstd 1.5.7 at level 19 it
+becomes 4,572,033,589 bytes: a **ratio of 1.024x, a 2.4% reduction**. The saving
+is 111 MB.
 
-Es el nivel donde la literatura es más escasa en el contexto de modelos
-de IA. Existe trabajo en diferencias (diffs) de pesos para federated
-learning [Konečný et al., 2016], pero asume servidores centralizados y
-agregación promedio. Para redes P2P con topología dinámica y nodos que
-pueden tener versiones ligeramente distintas del mismo modelo, no hay una
-solución madura.
+That is far below the 1.1x–1.5x we estimated before measuring. The reason is
+that quantization introduces noise, which raises the entropy of the data: a
+4-bit weight has only 16 possible values, and the structural redundancy that
+lossless compressors exploit almost disappears. The measurement supports the
+hypothesis that the ceiling sits against the informational limit.
 
-### Ejecución desde formato comprimido (streaming de pesos)
+The result is consistent with the ZipNN note in §7: its ~33% gain applies to
+BF16/FP32 weights, where the exponent structure still exists. After
+quantization, that margin is gone.
 
-El ecosistema ya ejecuta modelos con pesos residentes en disco: GGUF se
-abre con `mmap` y el sistema operativo trae páginas a RAM bajo demanda;
-en modelos MoE los expertos se mapean bajo demanda con `mmap` (solo los
-expertos activos residen en RAM, el resto permanece en disco); herramientas
-como AirLLM ejecutan capa por capa leyendo del SSD; e investigación como
-*LLM in a Flash* (Apple, 2023) formaliza el streaming de pesos desde
-almacenamiento flash en dispositivos con memoria limitada. El patrón
-común: el motor de inferencia es pequeño, los datos son grandes, y el
-formato de ejecución debe soportar acceso aleatorio — no descompresión
-secuencial. En el ecosistema Rust, mistral.rs implementa cuantización
-in-situ (ISQ) y formatos ejecutables (UQFF) sobre candle, lo que demuestra
-que un motor completo con estas propiedades es viable fuera de C++.
+Reproducible with:
 
-## 5. Dónde hay espacio real de investigación
+```bash
+# Model: Qwen/Qwen2.5-Coder-7B-Instruct-GGUF (q4_k_m)
+ls -l qwen2.5-coder-7b-instruct-q4_k_m.gguf      # 4683073536
+zstd -19 -T0 qwen2.5-coder-7b-instruct-q4_k_m.gguf -o model.zst
+ls -l model.zst                                  # 4572033589
+```
 
-El proyecto `chaka` se enfoca en tres frentes:
+Hardware: MacBook M1 Pro, 8 cores, 16 GB RAM. Compression time: 3m43s.
 
-1. **Nivel 1: mejorar K-quants.** Los K-quants de GGUF son heurísticos
-   y están optimizados para la familia de modelos LLaMA. Queremos explorar
-   si esquemas de cuantización basados en búsqueda (como los de AQLM o
-   QuIP#) pueden superar a K-quants en el caso general, especialmente para
-   modelos fuera de la familia LLaMA (Qwen, DeepSeek, etc.). También
-   interesa la cuantización mixta por capa guiada por métricas de
-   importancia.
+### Level 3 — Delta compression
 
-2. **Nivel 3: compresión de deltas para P2P.** Este es el terreno con
-   menos solución previa. Diseñar un formato de delta que:
-   - Sea eficiente cuando el cambio entre versiones es pequeño (<1% de
-     los pesos).
-   - No requiera tener ambas versiones completas en memoria para aplicar
-     el delta.
-   - Soporte merges: si el nodo A recibe un delta del nodo B y otro
-     del nodo C, debe poder combinarlos.
-   Esto no existe hoy como formato estándar.
+This is the level where the literature is thinnest in the context of AI models.
+There is work on weight diffs for federated learning [Konečný et al., 2016], but
+it assumes centralized servers and averaging aggregation. For P2P networks with
+dynamic topology and nodes that may hold slightly different versions of the
+same model, there is no mature solution.
 
-3. **Formato de doble perfil (ejecución + transferencia).** Consecuencia
-   directa de la restricción transversal descrita en §3: `.wcx` debe
-   diseñarse como un formato con perfil de ejecución (bloques
-   direccionables, compatible con mmap, dequant por bloque dentro del
-   kernel) y perfil de transferencia (codec entrópico por bloque,
-   deltas), compartiendo la misma representación cuantizada. El
-   entregable aquí es una especificación — no solo una implementación —
-   porque un formato solo tiene valor si un motor de inferencia existente
-   (candle, mistral.rs) puede consumirlo.
+### Execution from a compressed format (weight streaming)
 
-## 6. Próximos pasos de investigación
+The ecosystem already executes models with weights resident on disk: GGUF is
+opened with `mmap` and the operating system brings pages into RAM on demand; in
+MoE models, experts are mapped on demand with `mmap` (only active experts reside
+in RAM, the rest stay on disk); tools such as AirLLM execute layer by layer
+reading from the SSD; and research such as *LLM in a Flash* (Apple, 2023)
+formalizes weight streaming from flash storage on memory-constrained devices.
+The common pattern: the inference engine is small, the data is large, and the
+execution format must support random access — not sequential decompression. In
+the Rust ecosystem, mistral.rs implements in-situ quantization (ISQ) and
+executable formats (UQFF) on top of candle, which shows that a complete engine
+with these properties is viable outside C++.
 
-1. Caracterizar la entropía y distribución de pesos post-cuantización en
-   modelos de diferentes familias (LLaMA, Qwen, DeepSeek, Mistral) para
-   establecer una línea base.
-2. Implementar un pipeline de evaluación de cuantización que permita
-   comparar K-quants, GPTQ, AQLM y QuIP# bajo las mismas condiciones.
-3. Diseñar la especificación del formato de delta (estructura de datos,
-   algoritmo de diff/apply, soporte de merge).
-4. Especificar el perfil de ejecución de `.wcx` (layout de bloques,
-   alineación, tabla de offsets compatible con mmap) comparándolo con el
-   layout interno de GGUF, antes de escribir más código de compresión.
-5. Evaluar el tamaño de delta esperado en escenarios realistas (fine-tuning
-   parcial, corrección de pesos, actualización de capas específicas).
-6. Publicar resultados como benchmark reproducible en este repositorio.
+## 5. Where there is real room for research
 
-## 7. Referencias
+The `chaka` project focuses on three fronts:
+
+1. **Level 1: improving K-quants.** GGUF's K-quants are heuristic and optimized
+   for the LLaMA family. We want to explore whether search-based quantization
+   schemes (such as those of AQLM or QuIP#) can beat K-quants in the general
+   case, especially for models outside the LLaMA family (Qwen, DeepSeek, etc.).
+   Mixed per-layer quantization guided by importance metrics is also of
+   interest.
+
+2. **Level 3: delta compression for P2P.** This is the terrain with the least
+   prior solution. Designing a delta format that:
+   - Is efficient when the change between versions is small (<1% of weights).
+   - Does not require both complete versions in memory to apply the delta.
+   - Supports merges: if node A receives a delta from node B and another from
+     node C, it must be able to combine them.
+   This does not exist today as a standard format.
+
+3. **Dual-profile format (execution + transfer).** A direct consequence of the
+   cross-cutting constraint described in §3: `.wcx` must be designed as a format
+   with an execution profile (addressable blocks, mmap-compatible, per-block
+   dequantization inside the kernel) and a transfer profile (per-block entropy
+   codec, deltas), sharing the same quantized representation. The deliverable
+   here is a specification — not only an implementation — because a format is
+   only worth something if an existing inference engine (candle, mistral.rs) can
+   consume it.
+
+## 6. Work in progress
+
+Status as of November 2026. Each line states what is done, what is blocked and
+why.
+
+1. **Characterizing post-quantization entropy** — *in progress*. The first slice
+   is measured in §4, Level 2: one model family, one quantization level, one
+   ratio. Extending it to LLaMA, Qwen, DeepSeek and Mistral, and to more levels
+   (Q2_K to Q8_0), is pending.
+2. **Quantization evaluation pipeline** — *blocked on hardware*. Comparing
+   K-quants, GPTQ, AQLM and QuIP# under identical conditions requires
+   quantizing locally, which needs a GPU. In the meantime we use the
+   checkpoints each method already publishes, which allows comparing quality
+   but not reproducing the process.
+3. **Delta format specification** — *pending*. Data structure, diff/apply
+   algorithm and merge support.
+4. **`.wcx` execution profile** — *pending*. Block layout, alignment and
+   mmap-compatible offset table, compared against GGUF's internal layout. This
+   is design work that precedes more compression code.
+5. **Delta size in realistic scenarios** — *pending*. Partial fine-tuning,
+   weight correction and updates to specific layers.
+6. **Reproducible benchmark** — *partial*. The §4 measurement already reproduces
+   with the commands listed there. The rest is pending.
+
+## 7. References
 
 - [Dettmers et al., 2022] LLM.int8(): 8-bit Matrix Multiplication for
   Transformers at Scale. arXiv:2208.07339
@@ -236,18 +249,17 @@ El proyecto `chaka` se enfoca en tres frentes:
   Generative Pre-trained Transformers. arXiv:2210.17323
 - [Tseng et al., 2024] QuIP#: Even Better LLM Quantization with Hadamard
   Incoherence and Lattice Codebooks. arXiv:2402.04396
-- [Egiazarian et al., 2024] Extreme Compression of Large Language Models
-  via Additive Quantization (AQLM). arXiv:2401.06118
+- [Egiazarian et al., 2024] Extreme Compression of Large Language Models via
+  Additive Quantization (AQLM). arXiv:2401.06118
 - [Konečný et al., 2016] Federated Learning: Strategies for Improving
   Communication Efficiency. arXiv:1610.05492
 - [Alizadeh et al., 2023] LLM in a Flash: Efficient Large Language Model
   Inference with Limited Memory. arXiv:2312.11514
 - [Hershcovitch et al., 2024] ZipNN: Lossless Compression for AI Models.
-  arXiv:2411.05239 — nota: sus ganancias (~33%) aplican sobre pesos en
-  BF16/FP32 explotando la estructura del exponente; post-cuantización el
-  límite informacional descrito en §4 (Nivel 2) se mantiene.
-- Especificación GGUF / ggml. https://github.com/ggml-org/ggml
-- AirLLM — inferencia capa por capa desde SSD.
-  https://github.com/lyogavin/airllm
-- mistral.rs — motor de inferencia en Rust con cuantización in-situ (ISQ)
-  y formato ejecutable UQFF. https://github.com/EricLBuehler/mistral.rs
+  arXiv:2411.05239 — note: its gains (~33%) apply to BF16/FP32 weights by
+  exploiting exponent structure; after quantization the informational limit
+  described in §4 (Level 2) still holds.
+- GGUF / ggml specification. https://github.com/ggml-org/ggml
+- AirLLM — layer-by-layer inference from SSD. https://github.com/lyogavin/airllm
+- mistral.rs — Rust inference engine with in-situ quantization (ISQ) and
+  executable format (UQFF). https://github.com/EricLBuehler/mistral.rs
